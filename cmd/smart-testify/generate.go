@@ -10,7 +10,6 @@ import (
 	"go/token"
 	"io/fs"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"smart-testify/internal/util"
@@ -23,51 +22,55 @@ var generate = &cobra.Command{
 	Short: "Generate test files for Go code",
 	Run: func(cmd *cobra.Command, args []string) {
 		if pathFlag == "" {
-			log.Fatal("Path must be specified")
+			log.Errorf("Path must be specified")
+			return
 		}
 
 		// Ensure the token is valid
 		if err := client.LoadToken(); err != nil {
-			log.Fatalf("Error loading token: %v", err)
+			log.Errorf("Error loading token: %v", err)
+			return
 		}
 
 		// Process file or directory
 		fileInfo, err := os.Stat(pathFlag)
 		if err != nil {
-			log.Fatalf("Failed to stat path: %v", err)
+			log.Errorf("Failed to get file info: %v, please check the path", err)
+			return
 		}
 
 		if fileInfo.IsDir() {
-			processDirectory(pathFlag)
+			if err := processDirectory(pathFlag); err != nil {
+				log.Errorf("Failed to process directory: %v", err)
+			}
 		} else {
 			if err := processFile(pathFlag); err != nil {
-				log.Fatalf("Failed to process file: %v", err)
+				log.Errorf("Failed to process file: %v", err)
 			}
 		}
 	},
 }
 
-func processDirectory(path string) {
-	err := filepath.Walk(path, func(filePath string, info fs.FileInfo, err error) error {
+func processDirectory(path string) error {
+	return filepath.Walk(path, func(filePath string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() && strings.HasSuffix(filePath, ".go") && !strings.HasSuffix(filePath, "_test.go") {
 			if err := processFile(filePath); err != nil {
-				log.Printf("Failed to process file: %v", err)
-				return err
+				log.Errorf("Failed to process file: %v", err)
+				if !ignoreErrorFlag {
+					return err
+				}
 			}
 		}
 		return nil
 	})
-
-	if err != nil {
-		log.Fatalf("Failed to walk directory: %v", err)
-	}
 }
 
 func processFile(filePath string) error {
-	// Parse the Go file
+	log.Infof("Starting to process file: %s", filePath)
+	defer log.Infof("Finished processing file: %s", filePath)
 	fset, node, err := parseGoFile(filePath)
 	if err != nil {
 		return fmt.Errorf("Failed to parse file %s: %v", filePath, err)
@@ -76,7 +79,7 @@ func processFile(filePath string) error {
 	// Collect methods and types
 	methods, types := collectMethodsAndTypes(node)
 	if len(methods) == 0 {
-		log.Printf("No methods found in file %s, skipping it...", filePath)
+		log.Infof("No methods found in file %s, skipping it...", filePath)
 		return nil
 	}
 
@@ -111,11 +114,11 @@ func processFile(filePath string) error {
 
 		// Check if a test function already exists for this method
 		if existingTest, exists := existingTests[testFuncName]; exists {
-			log.Printf("Test function for method %s already exists", method.Name.Name)
+			log.Infof("[%s] Test function already exists", testFuncName)
 
 			// If mode is skip, skip generating the test case for this method
 			if modeFlag == "skip" {
-				log.Printf("Skipping test generation for method %s", method.Name.Name)
+				log.Infof("[%s] Skipping test generation", testFuncName)
 				modifiedTestCode = append(modifiedTestCode, existingTest)
 				continue
 			}
@@ -131,7 +134,7 @@ func processFile(filePath string) error {
 
 				// Add the modified function to the list of declarations
 				modifiedTestCode = append(modifiedTestCode, &newTestDecl)
-				log.Printf("Appended new test function for method %s", method.Name.Name)
+				log.Infof("[%s] Rename existing test function to %s", testFuncName, newTestFuncName)
 			}
 
 			// If mode is overwrite, delete the existing test method from the AST
@@ -139,10 +142,12 @@ func processFile(filePath string) error {
 				// Remove the old test function from the AST
 				// This is achieved by filtering out the existing test function from the declarations
 				//modifiedTestCode = removeTestFunction(modifiedTestCode, existingTest)
-				log.Printf("Overwritten test function for method %s", method.Name.Name)
+				log.Infof("[%s] Overwritting test function", testFuncName)
 			}
 		}
-		//
+
+		log.Infof("[%s] Generating test cases using Copilot", testFuncName)
+
 		testMethodSourceCode, err := generateTestCases(fset, []*ast.FuncDecl{method}, types, filePath)
 		if err != nil {
 			return fmt.Errorf("Failed to generate test cases for method %s: %v", method.Name.Name, err)
@@ -151,28 +156,30 @@ func processFile(filePath string) error {
 	}
 
 	if generatedTestCode == "" {
-		log.Printf("No test cases generated for file %s", filePath)
+		log.Infof("No test cases generated for file %s", filePath)
 		return nil
 	}
 
 	// Generate the modified test file content by modifying the AST
-	modifiedTestFileCode := generateTestFileFromAST(fset, existingNode, modifiedTestCode)
+	modifiedTestFileCode, err := generateTestFileFromAST(fset, existingNode, modifiedTestCode)
+	if err != nil {
+		return fmt.Errorf("Failed to generate test file from AST: %v", err)
+	}
 
 	// Append the generated test code to the existing test file code
 	modifiedTestFileCode += generatedTestCode
 
 	// TODO generate the new test file
 	// Write the final generated code to the test file
-	err = writeTestFile(testFilePath, modifiedTestFileCode)
-	if err != nil {
+	if err := writeTestFile(testFilePath, modifiedTestFileCode); err != nil {
 		return fmt.Errorf("Failed to write to test file %s: %v", testFilePath, err)
 	}
 
-	log.Printf("Generated test file: %s", testFilePath)
 	if err := util.RunGoImports(testFilePath); err != nil {
-		log.Printf("[Warning] Failed to run goimports for %s due to %s", testFilePath, err)
+		log.Warnf("Failed to run goimports for %s due to %s", testFilePath, err)
 	}
-	return nil
+
+	return err
 }
 
 // writeTestFile writes the modified test code to the test file
@@ -180,7 +187,7 @@ func writeTestFile(testFilePath, finalCode string) error {
 	// If the file already exists, overwrite it
 	err := ioutil.WriteFile(testFilePath, []byte(finalCode), 0644)
 	if err != nil {
-		log.Printf("Failed to write to file %s: %v", testFilePath, err)
+		log.Errorf("Failed to write to file %s: %v", testFilePath, err)
 		return err
 	}
 	return nil
@@ -208,7 +215,7 @@ func parseTestFile(fset *token.FileSet, existingTestCode string) (*ast.File, map
 }
 
 // generateTestFileFromAST generates the final test file code from the modified AST.
-func generateTestFileFromAST(fset *token.FileSet, existingNode *ast.File, modifiedTestCode []ast.Decl) string {
+func generateTestFileFromAST(fset *token.FileSet, existingNode *ast.File, modifiedTestCode []ast.Decl) (string, error) {
 	var buf bytes.Buffer
 	node := &ast.File{
 		Decls: modifiedTestCode,
@@ -218,11 +225,10 @@ func generateTestFileFromAST(fset *token.FileSet, existingNode *ast.File, modifi
 	// Format the AST to source code
 	err := format.Node(&buf, fset, node)
 	if err != nil {
-		log.Printf("Failed to format AST: %v", err)
-		return ""
+		return "", err
 	}
 
-	return buf.String()
+	return buf.String(), nil
 }
 
 // generateTestFuncName generates the test function name based on receiver type and method name.
@@ -258,7 +264,8 @@ func generateTestCases(fset *token.FileSet, methods []*ast.FuncDecl, types map[s
 		if err != nil {
 			return "", fmt.Errorf("Failed to generate prompt: %s", err.Error())
 		}
-		fmt.Printf("Prompt: %s", prompt)
+
+		log.Debugf("Prompt for method %s: %s", method.Name.Name, prompt)
 
 		// Get the response from the Copilot client
 		response, err := client.Chat(prompt)

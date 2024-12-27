@@ -2,14 +2,16 @@ package main
 
 import (
 	"github.com/spf13/cobra"
-	"log"
 	"smart-testify/internal/copilot"
+	"smart-testify/internal/logger"
 )
 
 var (
-	client   = copilot.NewCopilotClient() // Global Copilot client
-	pathFlag string
-	modeFlag string
+	log             = logger.GetLogger()         // Global logger
+	client          = copilot.NewCopilotClient() // Global Copilot client
+	pathFlag        string
+	modeFlag        string
+	ignoreErrorFlag bool
 )
 
 // Initialize root command
@@ -22,6 +24,8 @@ func init() {
 	// Add flags for the generate command
 	generate.Flags().StringVarP(&pathFlag, "path", "p", "", "Path to the file or directory to generate tests for")
 	generate.Flags().StringVarP(&modeFlag, "mode", "m", "overwrite", "Mode for test file generation: overwrite, append, or skip")
+
+	rootCmd.PersistentFlags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue execution even if an error occurs")
 
 	// Add the init-token subcommand
 	rootCmd.AddCommand(initTokenCmd)
