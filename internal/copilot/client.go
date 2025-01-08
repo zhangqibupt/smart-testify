@@ -18,13 +18,14 @@ const tokenFile = ".copilot_token"
 
 // CopilotClient struct holds the token and messages for interactions
 type CopilotClient struct {
-	Token    string
-	Messages []map[string]string
+	Token      string
+	Contextual bool // Whether to append the previous messages to the current request
+	Messages   []map[string]string
 }
 
 // NewCopilotClient initializes a CopilotClient instance
-func NewCopilotClient() *CopilotClient {
-	return &CopilotClient{}
+func NewCopilotClient(Contextual bool) *CopilotClient {
+	return &CopilotClient{Contextual: Contextual}
 }
 
 // GenerateToken authenticates the user and saves the access token
@@ -167,10 +168,19 @@ func (c *CopilotClient) Chat(message string) (string, error) {
 		return "", errors.New("token is not initialized")
 	}
 
-	c.Messages = append(c.Messages, map[string]string{
-		"content": message,
-		"role":    "user",
-	})
+	if c.Contextual {
+		c.Messages = append(c.Messages, map[string]string{
+			"content": message,
+			"role":    "user",
+		})
+	} else {
+		c.Messages = []map[string]string{
+			{
+				"content": message,
+				"role":    "user",
+			},
+		}
+	}
 
 	chatURL := "https://api.githubcopilot.com/chat/completions"
 	reqBody := map[string]interface{}{

@@ -7,10 +7,11 @@ import (
 )
 
 var (
-	log             = logger.GetLogger()         // Global logger
-	client          = copilot.NewCopilotClient() // Global Copilot client
+	log             = logger.GetLogger() // Global logger
+	client          = copilot.NewCopilotClient(false)
 	pathFlag        string
 	modeFlag        string
+	functionFilter  string
 	ignoreErrorFlag bool
 )
 
@@ -24,6 +25,7 @@ func init() {
 	// Add flags for the generate command
 	generate.Flags().StringVarP(&pathFlag, "path", "p", "", "Path to the file or directory to generate tests for")
 	generate.Flags().StringVarP(&modeFlag, "mode", "m", "overwrite", "Mode for test file generation: overwrite, append, or skip")
+	generate.Flags().StringVarP(&functionFilter, "filter", "f", "", "Regex filter for functions to generate tests for")
 
 	rootCmd.PersistentFlags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue execution even if an error occurs")
 

@@ -10,7 +10,7 @@ var initTokenCmd = &cobra.Command{
 	Use:   "init-token",
 	Short: "Initialize Copilot token and save it to ~/.copilot_token",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := copilot.NewCopilotClient().GenerateToken(); err != nil {
+		if err := copilot.NewCopilotClient(false).GenerateToken(); err != nil {
 			log.Errorf("Error initializing token: %v", err)
 		}
 	},

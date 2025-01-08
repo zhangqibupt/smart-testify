@@ -33,7 +33,7 @@ func init() {
 	if os.Getenv("LOG_FORMAT") == "json" {
 		log.SetFormatter(&logrus.JSONFormatter{})
 	} else {
-		log.SetFormatter(&logrus.TextFormatter{DisableColors: true})
+		log.SetFormatter(&logrus.TextFormatter{DisableColors: false})
 	}
 
 	log.SetOutput(os.Stdout)
