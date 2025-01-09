@@ -13,7 +13,7 @@ func init() {
 
 	level := os.Getenv("LOG_LEVEL")
 	if level == "" {
-		level = "info" // 默认日志级别
+		level = "info"
 	}
 
 	switch strings.ToLower(level) {

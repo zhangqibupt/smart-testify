@@ -69,24 +69,21 @@ func FindTypeSource(filePath string, typePrefixImportName string, typeName strin
 }
 
 func findImportPath(pkgShortName string, imports []*ast.ImportSpec) (string, bool) {
-	// 正则表达式用于从路径中提取包名部分
-	// 如果路径有版本号，需要去掉版本号, 如 github.com/volatiletech/null/v9
+	// need to remove version in path, for example, github.com/volatiletech/null/v9
 	re := regexp.MustCompile(`/v\d+$`)
 
 	for _, imp := range imports {
-		// 获取实际的导入路径，去掉引号
 		importPath := strings.Trim(imp.Path.Value, `"`)
 
-		// 如果导入使用了别名
+		// check if the import has an alias
 		if imp.Name != nil {
-			// 检查别名是否与 pkgShortName 匹配
 			if imp.Name.Name == pkgShortName {
 				return importPath, true
 			}
 		} else {
-			// 如果没有别名，提取包名（通过正则表达式）
-			importPath = re.ReplaceAllString(importPath, "")
-			parts := strings.Split(importPath, "/")
+			// check if the import path ends with the package name
+			path := re.ReplaceAllString(importPath, "")
+			parts := strings.Split(path, "/")
 			if parts[len(parts)-1] == pkgShortName {
 				return importPath, true
 			}
@@ -129,10 +126,8 @@ func findTypeInFile(node *ast.File, typeName string) (string, error) {
 func formatTypeDeclaration(node *ast.File, typeName string, typeDecl *ast.TypeSpec) (string, error) {
 	var buf strings.Builder
 
-	// 添加 type 关键字和类型名称
 	buf.WriteString("type ")
 
-	// 格式化 TypeSpec 的内容
 	if err := formatNode(&buf, typeDecl); err != nil {
 		return "", fmt.Errorf("failed to format type: %w", err)
 	}
@@ -149,8 +144,8 @@ func findTypeInPackage(pkgPath, typeName string) (string, error) {
 			return err
 		}
 
-		// Skip directories and non-Go files
-		if info.IsDir() || filepath.Ext(info.Name()) != ".go" {
+		// Skip directories, non-Go files and test files
+		if info.IsDir() || filepath.Ext(info.Name()) != ".go" || strings.HasSuffix(info.Name(), "_test.go") {
 			return nil
 		}
 
@@ -180,15 +175,6 @@ func findTypeInPackage(pkgPath, typeName string) (string, error) {
 	}
 
 	return result, nil
-}
-
-func collectImports(node *ast.File) []string {
-	var imports []string
-	for _, imp := range node.Imports {
-		importPath := strings.Trim(imp.Path.Value, `"`)
-		imports = append(imports, importPath)
-	}
-	return imports
 }
 
 func formatNode(buf *strings.Builder, node ast.Node) error {
