@@ -60,15 +60,16 @@ To generate unit tests for your Go files, run the following command:
 
 Suppose you have the following Go file  `example.go`:
 ```  
-package example  
+package example
+
+type Greeter struct {
+	Name string
+}
+
+func (g *Greeter) Greet() string {
+	return "Hello, " + g.Name
+}
   
-import "fmt"  
-  
-type Greeter struct {  
- Name string}  
-  
-func (g *Greeter) Greet() string {  
- return "Hello, " + g.Name}  
 ```  
 Run the following command to generate a test file for `example.go`:
 ```  
@@ -76,13 +77,19 @@ smart-testify generate -p ./example.go -m overwrite
 ```  
 The generated test file  `example_test.go` might look like this:
 ```  
-package example  
+package example
+
+import "testing"
+
+func TestGreeter_Greet(t *testing.T) {
+	greeter := &Greeter{Name: "World"}
+	got := greeter.Greet()
+	want := "Hello, World"
+	if got != want {
+		t.Errorf("Greet() = %v, want %v", got, want)
+	}
+}
   
-import "testing"  
-  
-func TestGreeter_Greet(t *testing.T) {  
- greeter := &Greeter{Name: "World"} got := greeter.Greet() want := "Hello, World"     if got != want {  
- t.Errorf("Greet() = %v, want %v", got, want) }}  
 ```  
 ### 2. Generating Tests for Multiple Files
 
