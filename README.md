@@ -24,7 +24,6 @@
 First, clone the project to your local machine. 
 Run `make install` to install the necessary dependencies and build the project. This will create an executable file named `smart-testify` in $GOPATH/bin folder.
 
-```
   
 ### 2. Set Up Copilot Token
 
