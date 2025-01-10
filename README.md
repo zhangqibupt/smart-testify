@@ -21,23 +21,24 @@
 
 ### 1. Install
 
-First, clone the project to your local machine:
-```  
-go install github.com/zhangqibuptse/smart-testify  
-```  
+First, clone the project to your local machine. 
+Run `make install` to install the necessary dependencies and build the project. This will create an executable file named `smart-testify` in $GOPATH/bin folder.
+
+```
+  
 ### 2. Set Up Copilot Token
 
 **Smart-Testify** requires a valid Copilot token for generating tests. You need to set up this token for the tool to interact with the Copilot API.
 
 Run the following command to initialize the Copilot token:
 ```  
-./smart-testify init-token  
+smart-testify init-token  
 ```  
 Follow the instructions in the console. This command will store your token in the ~/.copilot_token file, which will be used by the tool during subsequent interactions with Copilot.
 ### 3 . Run the Program
 To generate unit tests for your Go files, run the following command:
 ```  
-./smart-testify generate --path /path/to/your/go/file/or/directory --mode overwrite  
+smart-testify generate --path /path/to/your/go/file/or/directory --mode overwrite  
 ```  
 #### Available Commands and Flags
 
@@ -95,7 +96,7 @@ func TestGreeter_Greet(t *testing.T) {
 
 To generate tests for all Go files in a directory, use the directory path:
 ```  
-./smart-testify generate -p ./example_dir -m append  
+smart-testify generate -p ./example_dir -m append  
 ```  
 This will generate tests for all Go files in  `example_dir` that don't already have tests.
 
