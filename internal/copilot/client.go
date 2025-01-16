@@ -9,12 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"smart-testify/internal/logger"
 	"strings"
 	"time"
 )
 
 const model = "gpt-4o"
-const tokenFile = ".copilot_token"
+
+var log = logger.GetLogger() // Global logger
 
 // CopilotClient struct holds the token and messages for interactions
 type CopilotClient struct {
@@ -44,8 +46,13 @@ func (c *CopilotClient) GenerateToken() error {
 	req.Header.Set("Accept", "application/json")       // Add Accept header
 	req.Header.Set("Content-Type", "application/json") // Add Content-Type header
 
+	// Create a custom HTTP client with a longer timeout (e.g., 60 seconds)
+	client := &http.Client{
+		Timeout: 60 * time.Second, // Set timeout to 60 seconds
+	}
+	log.Info("Requesting access token from GitHub Copilot...")
 	// Send the initial request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -120,6 +127,11 @@ func (c *CopilotClient) GenerateToken() error {
 		return fmt.Errorf("error getting token file path: %v", err)
 	}
 
+	dir := filepath.Dir(tokenFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("error creating directory: %v", err)
+	}
+
 	file, err := os.OpenFile(tokenFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("error opening or creating token file: %v", err)
@@ -141,7 +153,7 @@ func getTokenFilePath() (string, error) {
 		return "", fmt.Errorf("unable to get home directory: %v", err)
 	}
 
-	tokenFilePath := filepath.Join(homeDir, tokenFile)
+	tokenFilePath := filepath.Join(homeDir, ".smart-testify", "copilot_token")
 	return tokenFilePath, nil
 }
 
@@ -151,6 +163,12 @@ func (c *CopilotClient) LoadToken() error {
 	tokenFilePath, err := getTokenFilePath()
 	if err != nil {
 		return err
+	}
+
+	// judge if the token file exists
+	_, err = os.Stat(tokenFilePath)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("token file not found: %v. Please run 'smart-testify init-token' to generate a new token", err)
 	}
 
 	tokenData, err := ioutil.ReadFile(tokenFilePath)

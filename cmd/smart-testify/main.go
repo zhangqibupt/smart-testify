@@ -13,30 +13,28 @@ var (
 	modeFlag        string
 	functionFilter  string
 	ignoreErrorFlag bool
+	granularity     string
 )
 
 // Initialize root command
 var rootCmd = &cobra.Command{
 	Use:   "smart-testify",
-	Short: "A tool to generate test files for Go code using AI",
+	Short: "A tool to generate unit tests for Go file using Copilot AI",
 }
 
 func init() {
 	// Add flags for the generate command
-	generate.Flags().StringVarP(&pathFlag, "path", "p", "", "Path to the file or directory to generate tests for")
-	generate.Flags().StringVarP(&modeFlag, "mode", "m", "overwrite", "Mode for test file generation: overwrite, append, or skip")
-	generate.Flags().StringVarP(&functionFilter, "filter", "f", "", "Regex filter for functions to generate tests for")
+	rootCmd.PersistentFlags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue handling next file if error occurs")
 
-	rootCmd.PersistentFlags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue execution even if an error occurs")
-
-	// Add the init-token subcommand
 	rootCmd.AddCommand(initTokenCmd)
+	rootCmd.AddCommand(promptCmd)
+	rootCmd.AddCommand(generateCmd)
 
-	// Add the generate subcommand
-	rootCmd.AddCommand(generate)
 }
 
 func main() {
+	cobra.EnableCommandSorting = false
+
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
 	}

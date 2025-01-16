@@ -33,7 +33,7 @@ Run the following command to initialize the Copilot token:
 ```  
 smart-testify init-token  
 ```  
-Follow the instructions in the console. This command will store your token in the ~/.copilot_token file, which will be used by the tool during subsequent interactions with Copilot.
+Follow the instructions in the console. This command will store your token in the ~/.smart-testify/copilot_token file, which will be used by the tool during subsequent interactions with Copilot.
 ### 3 . Run the Program
 To generate unit tests for your Go files, run the following command:
 ```  
@@ -116,7 +116,7 @@ The logger is configured to output logs to stdout.
 
 ### 1.  **How do I obtain the GitHub Copilot token?**
 
-You can get an API token from  [GitHub Copilot](https://github.com/copilot) and store it in the  `~/.copilot_token` file.
+You can get an API token from  [GitHub Copilot](https://github.com/copilot) and store it in the  `~/.smart-testify/copilot_token` file.
 
 ### 2.  **How do I choose a generation mode?**
 
