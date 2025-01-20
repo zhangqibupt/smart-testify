@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
 	"go/ast"
@@ -13,7 +14,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"smart-testify/internal/twinkle"
 	"smart-testify/internal/util"
+	"sort"
 	"strings"
 )
 
@@ -24,12 +27,6 @@ var generateCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if pathFlag == "" {
 			log.Errorf("Path must be specified")
-			return
-		}
-
-		// Ensure the token is valid
-		if err := client.LoadToken(); err != nil {
-			log.Errorf("Error loading token: %v", err)
 			return
 		}
 
@@ -156,7 +153,7 @@ func processFile(filePath string) error {
 			}
 		}
 
-		log.Infof("[%s] Generating test cases using Copilot......", testFuncName)
+		log.Infof("[%s] Start to generating test cases", testFuncName)
 
 		testMethodSourceCode, err := generateTestCases(sourceFileSet, []*ast.FuncDecl{method}, filePath)
 		if err != nil {
@@ -194,7 +191,7 @@ func processFile(filePath string) error {
 		log.Warnf("Failed to run goimports for %s due to %s", testFilePath, err)
 	}
 
-	return err
+	return nil
 }
 
 func defaultTestFile(packageName string) string {
@@ -275,7 +272,7 @@ func generateTestFuncName(method *ast.FuncDecl) (string, error) {
 		}
 
 		// Generate test function name: Test[Receiver][Method]
-		return "Test" + pair[0].typeName + "_" + method.Name.Name, nil
+		return "Test" + pair[0].TypeName + "_" + method.Name.Name, nil
 	}
 	return "Test" + method.Name.Name, nil
 }
@@ -304,42 +301,125 @@ func generateTestCases(fset *token.FileSet, methods []*ast.FuncDecl, filePath st
 
 		log.Infof("Prompt for method %s: %s", method.Name.Name, prompt)
 
-		// Get the response from the Copilot client
-		response, err := client.Chat(prompt)
-		if err != nil {
-			return "", fmt.Errorf("Failed to get response from Copilot: %s", err.Error())
+		var resp string
+		if getGlobalConfig().Model == modelCopilot {
+			log.Infof("Using Copilot to generate test cases")
+			resp, err = getCopilotClient().Chat(prompt)
+			if err != nil {
+				return "", fmt.Errorf("Failed to get response from Copilot: %s", err.Error())
+			}
+		} else {
+			log.Infof("Using Twinkle to generate test cases")
+			resp, err = twinkle.CallTwinkleAPI(prompt)
+			if err != nil {
+				return "", fmt.Errorf("Failed to get response from Twinkle: %s", err.Error())
+			}
 		}
 
 		// Trim the code and add to test code
-		testCode += trimCode(response) + "\n\n"
+		log.Infof("Response from AI: %s", resp)
+		code, err := extractCode(resp)
+		if err != nil {
+			return "", fmt.Errorf("Failed to extract code: %s", err.Error())
+		}
+		testCode += code + "\n\n"
 	}
 	return testCode, nil
 }
 
-// trimCode removes ```go at the beginning and ``` at the end of the code block, if present
-func trimCode(response string) string {
-	// Trim leading and trailing whitespace
-	response = strings.TrimSpace(response)
-
-	// Check if the response starts with "```go"
-	if strings.HasPrefix(response, "```go") {
-		// Remove the "```go" at the start
-		response = strings.TrimPrefix(response, "```go")
+// extractCode extracts code from the response between triple backticks.
+func extractCode(response string) (string, error) {
+	// First, check for the backticks with a language tag (e.g., ```go)
+	start := strings.Index(response, "```go")
+	if start != -1 {
+		// If we find the ` ```go ` tag, adjust the start to skip over the tag
+		start += 5
+	} else {
+		// Otherwise, check for the generic backticks (```).
+		start = strings.Index(response, "```")
+		if start == -1 {
+			return "", errors.New("code not found: missing starting backticks")
+		}
+		start += 3 // Skip over the backticks
 	}
 
-	// Check if the response ends with "```"
-	if strings.HasSuffix(response, "```") {
-		// Remove the "```" at the end
-		response = strings.TrimSuffix(response, "```")
+	// Now, find the closing backticks
+	end := strings.LastIndex(response, "```")
+	if end == -1 || end == start {
+		return "", errors.New("code not found: missing ending backticks")
 	}
 
-	// Trim any leading or trailing whitespace again after trimming the code block markers
-	return strings.TrimSpace(response)
+	// Extract the code between the backticks
+	code := response[start:end]
+	// if multiple \n is found at the start of the code, remove it
+	code = strings.TrimLeft(code, "\n")
+	code = strings.TrimRight(code, "\n")
+	return code, nil
 }
 
 type typePair struct {
-	importName string
-	typeName   string
+	PackageName string
+	TypeName    string
+}
+
+type functionPair struct {
+	PackageName string
+	TypeName    string
+	FuncName    string
+}
+
+func uniqueFunctionPair(pairs []functionPair) []functionPair {
+	// Create a map to store unique pairs using the combination of importName and Name
+	uniqueMap := make(map[string]functionPair)
+
+	for _, pair := range pairs {
+		// Create a key by concatenating importName and Name
+		key := pair.PackageName + "." + pair.TypeName + "." + pair.FuncName
+		// Store the pair in the map (the key ensures uniqueness)
+		uniqueMap[key] = pair
+	}
+
+	// Convert the map values back to a slice
+	var uniquePairs []functionPair
+	for _, pair := range uniqueMap {
+		uniquePairs = append(uniquePairs, pair)
+	}
+
+	return uniquePairs
+}
+
+func uniqueTypePair(pairs []typePair) []typePair {
+	// Create a map to store unique pairs using the combination of importName and Name
+	uniqueMap := make(map[string]typePair)
+
+	for _, pair := range pairs {
+		// Create a key by concatenating importName and Name
+		key := pair.PackageName + "." + pair.TypeName
+		// Store the pair in the map (the key ensures uniqueness)
+		uniqueMap[key] = pair
+	}
+
+	// Convert the map values back to a slice
+	var uniquePairs []typePair
+	for _, pair := range uniqueMap {
+		uniquePairs = append(uniquePairs, pair)
+	}
+
+	return uniquePairs
+}
+
+func sortByImportNameAndName(pairs []typePair) {
+	sort.Slice(pairs, func(i, j int) bool {
+		// First, check if importName is empty
+		if pairs[i].PackageName == "" && pairs[j].PackageName != "" {
+			return true // Empty importName should come first
+		}
+		if pairs[i].PackageName != "" && pairs[j].PackageName == "" {
+			return false // Non-empty importName should come later
+		}
+		// If both have the same importName (either both empty or both non-empty), sort by Name
+		return pairs[i].TypeName < pairs[j].TypeName
+	})
 }
 
 func parseTypeDefination(expr ast.Expr) ([]typePair, error) {
@@ -446,10 +526,10 @@ func generatePrompt(fset *token.FileSet, method *ast.FuncDecl, filePath string) 
 %s
 %s
 
-The related type definition code is:
+The related types and functions definition code is:
 %s
 
-You should only output the code in one function, nothing else.
+You should only output the test function, nothing else. Don't output the package declaration, imports, or any other code.
 
 %s
 `,
@@ -460,9 +540,11 @@ You should only output the code in one function, nothing else.
 }
 
 func generateTypeDefinitionSectionCode(method *ast.FuncDecl, filePath string) (string, error) {
-	var allPairs []typePair
+	var allTypePairs []typePair
+
+	// Collect types from receiver, parameters, and results
 	if method.Recv != nil {
-		// Gather source code for the receiver, params, and returns types
+		// Gather source code for the receiver type
 		pairs, err := parseTypeDefination(method.Recv.List[0].Type)
 		if err != nil {
 			return "", err
@@ -470,7 +552,7 @@ func generateTypeDefinitionSectionCode(method *ast.FuncDecl, filePath string) (s
 		if len(pairs) == 0 {
 			return "", fmt.Errorf("receiver type not found")
 		}
-		allPairs = append(allPairs, pairs...)
+		allTypePairs = append(allTypePairs, pairs...)
 	}
 
 	if method.Type.Params != nil {
@@ -479,7 +561,7 @@ func generateTypeDefinitionSectionCode(method *ast.FuncDecl, filePath string) (s
 			if err != nil {
 				return "", err
 			}
-			allPairs = append(allPairs, pairs...)
+			allTypePairs = append(allTypePairs, pairs...)
 		}
 	}
 
@@ -489,16 +571,133 @@ func generateTypeDefinitionSectionCode(method *ast.FuncDecl, filePath string) (s
 			if err != nil {
 				return "", err
 			}
-			allPairs = append(allPairs, pairs...)
+			allTypePairs = append(allTypePairs, pairs...)
 		}
 	}
 
-	// genereate type related code
-	generatedTypeDefinationCode, err := generateTypeDefinition(filePath, allPairs)
+	// Gather types and functions used in the method body
+	usedFunctions, usedTypes, err := collectTypesAndFunctionsFromBody(method.Body)
 	if err != nil {
 		return "", err
 	}
+
+	// Append these used types and functions to the type list
+	allTypePairs = append(allTypePairs, usedTypes...)
+
+	// Generate type-related code
+	generatedTypeDefinationCode, err := generateTypeDefinition(filePath, allTypePairs)
+	if err != nil {
+		return "", err
+	}
+
+	// Optionally, add function definitions found in the method body (e.g., via FindFunctionSource)
+	sortFunctionPairs(usedFunctions)
+	for _, funcDef := range usedFunctions {
+		funcSource, err := util.FindFunctionSource(filePath, funcDef.PackageName, funcDef.TypeName, funcDef.FuncName)
+		if err != nil {
+			return "", fmt.Errorf("failed to find function definition for %s: %w", funcDef, err)
+		}
+		generatedTypeDefinationCode += "\n\n" + funcSource
+	}
+
 	return generatedTypeDefinationCode, nil
+}
+
+func sortFunctionPairs(functions []functionPair) {
+	sort.Slice(functions, func(i, j int) bool {
+		// Compare PackageName, with empty ones coming first
+		if functions[i].PackageName != functions[j].PackageName {
+			return functions[i].PackageName < functions[j].PackageName
+		}
+		// Compare TypeName
+		if functions[i].TypeName != functions[j].TypeName {
+			return functions[i].TypeName < functions[j].TypeName
+		}
+		// Compare FuncName
+		return functions[i].FuncName < functions[j].FuncName
+	})
+}
+
+// collectTypesAndFunctionsFromBody extracts all types and function names used within the method body.
+func collectTypesAndFunctionsFromBody(body *ast.BlockStmt) ([]functionPair, []typePair, error) {
+	if body == nil {
+		return nil, nil, nil
+	}
+
+	var usedFunctions []functionPair
+	var usedTypes []typePair
+
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.CallExpr:
+			if sel, ok := x.Fun.(*ast.SelectorExpr); ok {
+				// Handle calls like `pkg.Func()` or `var.Method()`
+				if pkgIdent, ok := sel.X.(*ast.Ident); ok {
+					if pkgIdent.Obj != nil && pkgIdent.Obj.Kind == ast.Pkg {
+						// This is a package function call (e.g., `pkg.Func()`)
+						usedFunctions = append(usedFunctions, functionPair{
+							PackageName: pkgIdent.Name,
+							TypeName:    "", // No type for package-level functions
+							FuncName:    sel.Sel.Name,
+						})
+					} else if pkgIdent.Obj != nil && pkgIdent.Obj.Kind == ast.Var {
+						// This is a variable method call (e.g., `var.Method()`)
+						// Extract the variable's type and package
+						if varDecl, ok := pkgIdent.Obj.Decl.(*ast.Field); ok {
+							var typeName, packageName string
+							if varDecl.Type != nil {
+								switch t := varDecl.Type.(type) {
+								case *ast.Ident:
+									// Local type (e.g., `MyType`)
+									typeName = t.Name
+								case *ast.StarExpr:
+									// Imported type (e.g., `pkg.MyType`)
+									if pkg, ok := t.X.(*ast.SelectorExpr); ok {
+										packageName = pkg.X.(*ast.Ident).Name
+										typeName = t.X.(*ast.SelectorExpr).Sel.Name
+									}
+								}
+							}
+							usedFunctions = append(usedFunctions, functionPair{
+								PackageName: packageName,
+								TypeName:    typeName,
+								FuncName:    sel.Sel.Name,
+							})
+						}
+					}
+				}
+			} else if funIdent, ok := x.Fun.(*ast.Ident); ok {
+				// Handle direct function calls (e.g., `Func()`)
+				usedFunctions = append(usedFunctions, functionPair{
+					PackageName: "", // No package for direct function calls
+					TypeName:    "", // No type for direct function calls
+					FuncName:    funIdent.Name,
+				})
+			}
+		case *ast.Ident:
+			// Handle type identifiers (e.g., `int`, `string`)
+			if x.Obj != nil && x.Obj.Kind == ast.Typ {
+				usedTypes = append(usedTypes, typePair{
+					PackageName: "", // No package for local types
+					TypeName:    x.Name,
+				})
+			}
+		case *ast.SelectorExpr:
+			// Handle type selectors (e.g., `pkg.Type`)
+			if pkgIdent, ok := x.X.(*ast.Ident); ok {
+				if x.Sel.Obj != nil && x.Sel.Obj.Kind == ast.Typ {
+					usedTypes = append(usedTypes, typePair{
+						PackageName: pkgIdent.Name,
+						TypeName:    x.Sel.Name,
+					})
+				}
+			}
+		}
+		return true
+	})
+
+	// Return unique pairs
+	return uniqueFunctionPair(usedFunctions), uniqueTypePair(usedTypes), nil
 }
 
 func generateImportSectionCode(path string) (string, error) {
@@ -538,43 +737,21 @@ func generateTypeDefinition(filePath string, pairs []typePair) (string, error) {
 	if len(pairs) == 0 {
 		return "", nil
 	}
-
-	// Use a map to ensure unique pairs based on importName and typeName
-	uniquePairs := make(map[string]typePair)
-	for _, pair := range pairs {
-		// Create a unique key by combining importName and typeName
-		key := fmt.Sprintf("%s:%s", pair.importName, pair.typeName)
-
-		// Only add to map if the key doesn't already exist
-		if _, exists := uniquePairs[key]; !exists {
-			uniquePairs[key] = pair
-		}
-	}
+	uniquePairs := uniqueTypePair(pairs)
+	sortByImportNameAndName(uniquePairs)
 
 	var resultCode strings.Builder
 
-	// Process pairs with empty importName first
 	for _, pair := range uniquePairs {
-		if pair.importName == "" {
-			sourceCode, err := util.FindTypeSource(filePath, pair.importName, pair.typeName)
-			if err != nil {
-				return "", err
-			}
-			if sourceCode != "" {
-				resultCode.WriteString(sourceCode + "\n")
-			}
+		sourceCode, err := util.FindTypeSource(filePath, pair.PackageName, pair.TypeName)
+		if err != nil {
+			return "", err
 		}
-	}
-
-	// Process pairs with non-empty importName
-	for _, pair := range uniquePairs {
-		if pair.importName != "" {
-			sourceCode, err := util.FindTypeSource(filePath, pair.importName, pair.typeName)
-			if err != nil {
-				return "", err
-			}
-			if sourceCode != "" {
-				resultCode.WriteString(fmt.Sprintf("Package: %s\nModel: %s\nDefinition:\n%s\n", pair.importName, pair.typeName, sourceCode))
+		if sourceCode != "" {
+			if pair.PackageName == "" {
+				resultCode.WriteString(fmt.Sprintf("Model: %s\nDefinition:\n%s\n", pair.TypeName, sourceCode))
+			} else {
+				resultCode.WriteString(fmt.Sprintf("Package: %s Model: %s\nDefinition:\n%s\n", pair.PackageName, pair.TypeName, sourceCode))
 			}
 		}
 	}

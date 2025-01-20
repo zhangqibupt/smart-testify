@@ -7,7 +7,7 @@
 ---   
 ## Features
 
-- **AI-Powered Test Generation**: Automatically generates unit test code using Copilot AI based on Go function signatures.
+- **AI-Powered Test Generation**: Automatically generates unit test code using AI based on Go function signatures.
 - **Supports File and Directory**: Can generate tests for a single Go file or for all Go files within a directory.
 - **Flexible Generation Modes**:
   - **`overwrite`**: Overwrites existing test files.

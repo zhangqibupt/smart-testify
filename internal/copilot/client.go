@@ -6,184 +6,33 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"smart-testify/internal/logger"
 	"strings"
-	"time"
 )
 
 const model = "gpt-4o"
 
 var log = logger.GetLogger() // Global logger
 
-// CopilotClient struct holds the token and messages for interactions
-type CopilotClient struct {
+// Client struct holds the token and messages for interactions
+type Client struct {
 	Token      string
 	Contextual bool // Whether to append the previous messages to the current request
 	Messages   []map[string]string
 }
 
-// NewCopilotClient initializes a CopilotClient instance
-func NewCopilotClient(Contextual bool) *CopilotClient {
-	return &CopilotClient{Contextual: Contextual}
-}
-
-// GenerateToken authenticates the user and saves the access token
-func (c *CopilotClient) GenerateToken() error {
-	clientID := "Iv1.b507a08c87ecfe98"
-	scope := "read:user"
-	url := "https://github.com/login/device/code"
-
-	reqBody := fmt.Sprintf(`{"client_id":"%s","scope":"%s"}`, clientID, scope)
-
-	// Create the initial request with Accept header
-	req, err := http.NewRequest("POST", url, strings.NewReader(reqBody))
-	if err != nil {
-		return err
+// NewCopilotClient initializes a Client instance
+func NewCopilotClient(token string, Contextual bool) *Client {
+	return &Client{
+		Contextual: Contextual,
+		Token:      token,
 	}
-	req.Header.Set("Accept", "application/json")       // Add Accept header
-	req.Header.Set("Content-Type", "application/json") // Add Content-Type header
-
-	// Create a custom HTTP client with a longer timeout (e.g., 60 seconds)
-	client := &http.Client{
-		Timeout: 60 * time.Second, // Set timeout to 60 seconds
-	}
-	log.Info("Requesting access token from GitHub Copilot...")
-	// Send the initial request
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Read the entire response body
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("error reading response body: %v", err)
-	}
-
-	var respJSON map[string]interface{}
-	if err := json.Unmarshal(respBody, &respJSON); err != nil {
-		return err
-	}
-
-	// Extract the necessary fields from the response
-	deviceCode, ok := respJSON["device_code"].(string)
-	if !ok {
-		return errors.New("device_code not found in response")
-	}
-	userCode, ok := respJSON["user_code"].(string)
-	if !ok {
-		return errors.New("user_code not found in response")
-	}
-	verificationURI, ok := respJSON["verification_uri"].(string)
-	if !ok {
-		return errors.New("verification_uri not found in response")
-	}
-
-	// Inform the user to authenticate
-	fmt.Printf("Please visit %s and enter code %s to authenticate.\n", verificationURI, userCode)
-
-	// Wait for the user to authenticate
-	for {
-		time.Sleep(5 * time.Second)
-
-		// Request the access token
-		tokenURL := "https://github.com/login/oauth/access_token"
-		tokenReqBody := fmt.Sprintf(`{"client_id":"%s","device_code":"%s","grant_type":"urn:ietf:params:oauth:grant-type:device_code"}`, clientID, deviceCode)
-
-		// Create the token request with Accept header
-		req, err := http.NewRequest("POST", tokenURL, strings.NewReader(tokenReqBody))
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Accept", "application/json")       // Add Accept header
-		req.Header.Set("Content-Type", "application/json") // Add Content-Type header
-
-		// Send the request for the access token
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		var respJSON map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&respJSON); err != nil {
-			return err
-		}
-
-		// If we got the access token, save it and break out of the loop
-		accessToken, ok := respJSON["access_token"].(string)
-		if ok {
-			c.Token = accessToken
-			break
-		}
-	}
-
-	tokenFilePath, err := getTokenFilePath()
-	if err != nil {
-		return fmt.Errorf("error getting token file path: %v", err)
-	}
-
-	dir := filepath.Dir(tokenFilePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("error creating directory: %v", err)
-	}
-
-	file, err := os.OpenFile(tokenFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("error opening or creating token file: %v", err)
-	}
-	defer file.Close()
-
-	// Write the token to the file
-	if _, err := file.Write([]byte(c.Token)); err != nil {
-		return fmt.Errorf("error writing token to file: %v", err)
-	}
-
-	fmt.Println("Authentication success!")
-	return nil
-}
-
-func getTokenFilePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("unable to get home directory: %v", err)
-	}
-
-	tokenFilePath := filepath.Join(homeDir, ".smart-testify", "copilot_token")
-	return tokenFilePath, nil
-}
-
-// LoadToken retrieves the stored token, or sets up a new token if not found
-func (c *CopilotClient) LoadToken() error {
-	// Check if the token file exists
-	tokenFilePath, err := getTokenFilePath()
-	if err != nil {
-		return err
-	}
-
-	// judge if the token file exists
-	_, err = os.Stat(tokenFilePath)
-	if os.IsNotExist(err) {
-		return fmt.Errorf("token file not found: %v. Please run 'smart-testify init-token' to generate a new token", err)
-	}
-
-	tokenData, err := ioutil.ReadFile(tokenFilePath)
-	if err == nil {
-		c.Token = string(tokenData)
-		return nil
-	}
-
-	return fmt.Errorf("error reading token file: %v", err)
 }
 
 // Chat sends a message to the Copilot API and returns the assistant's response
-func (c *CopilotClient) Chat(message string) (string, error) {
+func (c *Client) Chat(message string) (string, error) {
 	if c.Token == "" {
-		return "", errors.New("token is not initialized")
+		return "", errors.New("token is not initialized, please run 'smart-testify config copilot init-token' to initialize the token")
 	}
 
 	if c.Contextual {
@@ -280,11 +129,4 @@ func (c *CopilotClient) Chat(message string) (string, error) {
 	})
 
 	return result, nil
-}
-
-func RunGoImports(fileName string) error {
-	cmd := exec.Command("goimports", "-w", fileName)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }

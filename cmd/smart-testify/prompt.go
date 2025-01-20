@@ -33,6 +33,21 @@ var promptResetCMD = &cobra.Command{
 	},
 }
 
+// create a show command to display the prompt
+var promptShowCMD = &cobra.Command{
+	Use:   "show",
+	Short: "Show the current prompt",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Read the prompt from the file
+		prompt, err := loadPrompt()
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to load prompt: %v", err))
+			return
+		}
+		fmt.Printf(string(prompt))
+	},
+}
+
 func getPromptPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -41,8 +56,7 @@ func getPromptPath() string {
 	return filepath.Join(homeDir, ".smart-testify", "prompt")
 }
 
-const defaultPrompt = `
-The output must meet below conditions. 
+const defaultPrompt = `The output must meet below conditions. 
 1. Should include success and failure cases, and include edge cases. When DB operation is involved, you should include db error. Make your best to cover 100 percent of the code. 
 2. When it involve gorm DB operations, you should start sqlite in memory to mock it. For example gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{SingularTable: true},
@@ -129,4 +143,5 @@ func init() {
 	// Add subcommands to the prompt command
 	promptCmd.AddCommand(promptEditCMD)
 	promptCmd.AddCommand(promptResetCMD)
+	promptCmd.AddCommand(promptShowCMD)
 }
