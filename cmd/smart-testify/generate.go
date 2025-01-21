@@ -20,6 +20,22 @@ import (
 	"strings"
 )
 
+var (
+	pathFlag        string
+	modeFlag        string
+	functionFilter  string
+	ignoreErrorFlag bool
+	granularity     string
+)
+
+const (
+	modeSkip   = "skip"
+	modeAppend = "append"
+
+	granularityFile     = "file"
+	granularityFunction = "function"
+)
+
 // generateCmd generates the Go files or directories
 var generateCmd = &cobra.Command{
 	Use:   "generate",
@@ -36,6 +52,13 @@ var generateCmd = &cobra.Command{
 			log.Errorf("Failed to get file info: %v, please check the path", err)
 			return
 		}
+
+		// print all parameters before processing
+		log.Infof("Path: %s", pathFlag)
+		log.Infof("Mode: %s", modeFlag)
+		log.Infof("Function Filter: %s", functionFilter)
+		log.Infof("Ignore Error: %v", ignoreErrorFlag)
+		log.Infof("Granularity: %s", granularity)
 
 		if fileInfo.IsDir() {
 			if err := processDirectory(pathFlag); err != nil {
@@ -87,29 +110,23 @@ func processFile(filePath string) error {
 	// Test file path
 	testFilePath := strings.TrimSuffix(filePath, ".go") + "_test.go"
 	testFileExists := fileExists(testFilePath)
-	var existingNode *ast.File
 	var existingTests map[string]*ast.FuncDecl
 
 	if testFileExists {
-		if granularity == "file" && modeFlag == "skip" {
+		if granularity == granularityFile && modeFlag == modeSkip {
 			log.Infof("Test file exists for %s, skipping it...", filePath)
 			return nil
 		}
 
-		if granularity == "file" && modeFlag == "overwrite" {
-			testFileExists = false
-		} else {
-			existingNode, existingTests, err = parseTestFile(testFilePath)
-			if err != nil {
-				return fmt.Errorf("Failed to parse existing test file: %v", err)
-			}
+		_, existingTests, err = parseTestFile(testFilePath)
+		if err != nil {
+			return fmt.Errorf("Failed to parse existing test file: %v", err)
 		}
 
 	}
 
 	// Initialize final test code which will hold the generated or modified test code
 	var generatedTestCode string
-	var modifiedTestCode []ast.Decl
 
 	// Process each method and decide if we need to generate or skip test cases
 	for _, method := range methods {
@@ -120,36 +137,21 @@ func processFile(filePath string) error {
 		}
 
 		// Check if a test function already exists for this method
-		if existingTest, exists := existingTests[testFuncName]; exists {
+		if _, exists := existingTests[testFuncName]; exists {
 			log.Infof("[%s] Test function already exists", testFuncName)
 
 			// If mode is skip, skip generating the test case for this method
-			if modeFlag == "skip" && granularity == "function" {
+			if modeFlag == modeSkip && granularity == granularityFunction {
 				log.Infof("[%s] Skipping test generation", testFuncName)
-				modifiedTestCode = append(modifiedTestCode, existingTest)
 				continue
 			}
 
-			// If mode is append, generate a new test function with a unique name
-			if modeFlag == "append" && granularity == "function" {
-				// Append "_old" to the test function name to avoid conflicts
-				newTestFuncName := testFuncName + "_old"
-				// Create the new function declaration with the "_old" name
-				newTestDecl := *existingTest
-				newTestDecl.Name.Name = newTestFuncName
-				newTestDecl.Doc = existingTest.Doc
-
-				// Add the modified function to the list of declarations
-				modifiedTestCode = append(modifiedTestCode, &newTestDecl)
-				log.Infof("[%s] Rename existing test function to %s", testFuncName, newTestFuncName)
-			}
-
-			// If mode is overwrite, delete the existing test method from the AST
-			if modeFlag == "overwrite" && granularity == "function" {
+			// If mode is append, delete the existing test method from the AST
+			if modeFlag == modeAppend && granularity == granularityFunction {
 				// Remove the old test function from the AST
 				// This is achieved by filtering out the existing test function from the declarations
 				//modifiedTestCode = removeTestFunction(modifiedTestCode, existingTest)
-				log.Infof("[%s] Overwritting test function", testFuncName)
+				log.Infof("[%s] Append more cases", testFuncName)
 			}
 		}
 
@@ -168,22 +170,25 @@ func processFile(filePath string) error {
 	}
 
 	// Generate the modified test file content by modifying the AST
-	var modifiedTestFileCode string
+	var originalTestFileCode string
 	if testFileExists {
-		modifiedTestFileCode, err = generateTestFileFromAST(sourceFileSet, existingNode, modifiedTestCode)
+		// just load the existing test file content from testFilePath
+		testSourceFile, err := ioutil.ReadFile(testFilePath)
 		if err != nil {
-			return fmt.Errorf("Failed to generate test file from AST: %v", err)
+			log.Errorf("Failed to read test file %s: %v", testFilePath, err)
+			return err
 		}
+		originalTestFileCode = string(testSourceFile) + "\n"
+
 	} else {
-		modifiedTestFileCode = defaultTestFile(node.Name.Name)
+		originalTestFileCode = defaultTestFile(node.Name.Name)
 	}
 
 	// Append the generated test code to the existing test file code
-	modifiedTestFileCode += generatedTestCode
+	originalTestFileCode += generatedTestCode
 
-	// TODO generate the new test file
 	// Write the final generated code to the test file
-	if err := writeTestFile(testFilePath, modifiedTestFileCode); err != nil {
+	if err := writeTestFile(testFilePath, originalTestFileCode); err != nil {
 		return fmt.Errorf("Failed to write to test file %s: %v", testFilePath, err)
 	}
 
@@ -760,13 +765,12 @@ func generateTypeDefinition(filePath string, pairs []typePair) (string, error) {
 }
 
 func init() {
+	generateCmd.Flags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue handling next file if error occurs")
 	generateCmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Path to the file or directory to generate tests for")
-	generateCmd.Flags().StringVarP(&modeFlag, "mode", "m", "overwrite", "Mode for test file generation: overwrite, append, or skip")
+	generateCmd.Flags().StringVarP(&modeFlag, "mode", "m", modeAppend, "Mode for test file generation: append, or skip")
 	generateCmd.Flags().StringVarP(&functionFilter, "filter", "f", "", "Regex filter for functions to generate tests for")
-	generateCmd.Flags().StringVarP(&granularity, "granularity", "g", "file", "Used with the append mode to specify the granularity of test generation: file or function. "+
-		"When mode=overwrite and granularity=file, the entire test file is overwritten. "+
+	generateCmd.Flags().StringVarP(&granularity, "granularity", "g", granularityFunction, "Used with the append mode to specify the granularity of test generation: file or function. "+
 		"When mode=skip and granularity=file, the entire test file is skipped. "+
-		"When mode=overwrite and granularity=function, the test function is overwritten. "+
 		"When mode=skip and granularity=function, the test function is skipped. "+
 		"When mode=append, no matter the granularity, the test function is appended to the test file.")
 }

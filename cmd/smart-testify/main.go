@@ -6,12 +6,7 @@ import (
 )
 
 var (
-	log             = logger.GetLogger() // Global logger
-	pathFlag        string
-	modeFlag        string
-	functionFilter  string
-	ignoreErrorFlag bool
-	granularity     string
+	log = logger.GetLogger() // Global logger
 )
 
 // Initialize root command
@@ -21,9 +16,6 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	// Add flags for the generate command
-	rootCmd.PersistentFlags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue handling next file if error occurs")
-
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(generateCmd)
 }
