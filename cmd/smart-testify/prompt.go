@@ -12,7 +12,7 @@ import (
 
 var promptCmd = &cobra.Command{
 	Use:   "prompt",
-	Short: "Edit or view the default prompt for the generated test cases",
+	Short: "Edit or view the default prompt when calling AI model to generate test cases",
 }
 
 var promptEditCMD = &cobra.Command{
@@ -26,7 +26,7 @@ var promptEditCMD = &cobra.Command{
 
 var promptResetCMD = &cobra.Command{
 	Use:   "reset",
-	Short: "Reset the default prompt to its original state",
+	Short: "Reset the prompt to its original state",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Reset the prompt to the default state
 		resetPrompt()
@@ -140,8 +140,7 @@ func resetPrompt() {
 }
 
 func init() {
-	// Add subcommands to the prompt command
+	promptCmd.AddCommand(promptShowCMD)
 	promptCmd.AddCommand(promptEditCMD)
 	promptCmd.AddCommand(promptResetCMD)
-	promptCmd.AddCommand(promptShowCMD)
 }

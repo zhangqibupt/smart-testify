@@ -13,11 +13,19 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "smart-testify",
 	Short: "A tool to generate unit tests for Go file using AI",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cmd.SetHelpFunc(nil)
+	},
 }
 
 func init() {
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(generateCmd)
+	rootCmd.CompletionOptions.DisableDefaultCmd = true // 禁用 completion 命令
+	rootCmd.SetHelpCommand(&cobra.Command{
+		Use:    "no-help",
+		Hidden: true,
+	})
 }
 
 func main() {

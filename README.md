@@ -21,12 +21,12 @@ Smart-Testify can be installed by downloading the latest release or building fro
 
 Clone the repository, go into the root folder and run
 ```bash  
-go mod tidy
 make install
-cd smart-testify  
 ```  
 
 ## Usage
+
+
 
 ### Commands
 
@@ -43,44 +43,34 @@ Configure settings.
 #### `generate`
 Generate unit test files for Go code.
 
-- **`generate`**: Generate tests for a specified Go file or directory.
-  - **`--path`** (`-p`): Path to the Go file or directory.
-  - **`--mode`** (`-m`): Mode for test generation (`append` or `skip`).
+- **`generate <path>`**: Generate tests for a specified Go file or directory.
+  - **`--mode`** (`-m`): Mode for test generation (`append` or `skip`). Defaults to `append`.
   - **`--filter`** (`-f`): Regex filter for functions to generate tests for.
   - **`--granularity`** (`-g`): Granularity of test generation (`file` or `function`).
   - **`--ignore-error`** (`-c`): Continue processing if an error occurs. Defaults to `false`.
 
 ## Examples
 
-1. **Set the AI model to Copilot**:
+1. **Set the AI model to Twinkle**:
 ```bash  
- smart-testify config use copilot  
+ smart-testify config use twinkle  
 ```  
 
-2. **Show current configuration**:
+2. **Generate tests for a Go file**:
 ```bash  
- smart-testify config show  
+ smart-testify generate /path/to/your/file.go  
 ```  
 
-3. **Generate tests for a Go file**:
-```bash  
- smart-testify generate --path /path/to/your/file.go --mode append --granularity function  
-```  
-
-4. **Edit the prompt for test case generation**:
+3. **Edit the prompt for test case generation**:
 ```bash  
  smart-testify config prompt edit  
 ```  
 
-5. **Reset the prompt to the default**:
+4. **Reset the prompt to the default**:
 ```bash  
  smart-testify config prompt reset  
 ```  
 
-6. **Show the current prompt**:
-```bash  
- smart-testify config prompt show  
-```  
 
 ## Contributing
 

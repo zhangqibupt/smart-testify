@@ -21,9 +21,8 @@ import (
 )
 
 var (
-	pathFlag        string
 	modeFlag        string
-	functionFilter  string
+	filter          string
 	ignoreErrorFlag bool
 	granularity     string
 )
@@ -38,13 +37,16 @@ const (
 
 // generateCmd generates the Go files or directories
 var generateCmd = &cobra.Command{
-	Use:   "generate",
+	Use:   "generate <path of file or directory>",
 	Short: "Generate test files for Go code",
+	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		if pathFlag == "" {
-			log.Errorf("Path must be specified")
+		if len(args) == 0 {
+			cmd.Help()
 			return
 		}
+
+		pathFlag := args[0]
 
 		// Process file or directory
 		fileInfo, err := os.Stat(pathFlag)
@@ -56,7 +58,7 @@ var generateCmd = &cobra.Command{
 		// print all parameters before processing
 		log.Infof("Path: %s", pathFlag)
 		log.Infof("Mode: %s", modeFlag)
-		log.Infof("Function Filter: %s", functionFilter)
+		log.Infof("Function Filter: %s", filter)
 		log.Infof("Ignore Error: %v", ignoreErrorFlag)
 		log.Infof("Granularity: %s", granularity)
 
@@ -78,6 +80,19 @@ func processDirectory(path string) error {
 			return err
 		}
 		if !info.IsDir() && strings.HasSuffix(filePath, ".go") && !strings.HasSuffix(filePath, "_test.go") {
+			if filter != "" && granularity == granularityFile {
+				// get file name from filePath
+				_, fileName := filepath.Split(filePath)
+
+				regex, err := regexp.Compile(filter)
+				if err != nil {
+					return fmt.Errorf("Failed to compile regex: %v", err)
+				}
+				if !regex.MatchString(fileName) {
+					log.Infof("Skipping file %s due to filter", filePath)
+					return nil
+				}
+			}
 			if err := processFile(filePath); err != nil {
 				log.Errorf("Failed to process file: %v", err)
 				if !ignoreErrorFlag {
@@ -474,8 +489,8 @@ func collectMethods(node *ast.File) ([]*ast.FuncDecl, error) {
 
 	var regex *regexp.Regexp
 	var err error
-	if functionFilter != "" {
-		regex, err = regexp.Compile(functionFilter)
+	if filter != "" {
+		regex, err = regexp.Compile(filter)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to compile regex: %v", err)
 		}
@@ -765,12 +780,11 @@ func generateTypeDefinition(filePath string, pairs []typePair) (string, error) {
 }
 
 func init() {
-	generateCmd.Flags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue handling next file if error occurs")
-	generateCmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Path to the file or directory to generate tests for")
-	generateCmd.Flags().StringVarP(&modeFlag, "mode", "m", modeAppend, "Mode for test file generation: append, or skip")
-	generateCmd.Flags().StringVarP(&functionFilter, "filter", "f", "", "Regex filter for functions to generate tests for")
-	generateCmd.Flags().StringVarP(&granularity, "granularity", "g", granularityFunction, "Used with the append mode to specify the granularity of test generation: file or function. "+
+	generateCmd.Flags().StringVarP(&modeFlag, "mode", "m", modeAppend, "Mode controls whether the test cases will be generated when the test function/file(depends on the --granularity flag) already exists. Possible values: skip, append.")
+	generateCmd.Flags().StringVarP(&filter, "filter", "f", "", "Regex filter for functions/filter to generate tests for")
+	generateCmd.Flags().StringVarP(&granularity, "granularity", "g", granularityFunction, "Used with the append mode: file or function. "+
 		"When mode=skip and granularity=file, the entire test file is skipped. "+
 		"When mode=skip and granularity=function, the test function is skipped. "+
 		"When mode=append, no matter the granularity, the test function is appended to the test file.")
+	generateCmd.Flags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue handling next file even if an error occurs")
 }

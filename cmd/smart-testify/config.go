@@ -27,7 +27,7 @@ var configCmd = &cobra.Command{
 // configUseCmd sets the model to be used for test case generation
 var configUseCmd = &cobra.Command{
 	Use:   "use",
-	Short: "Set the model to be used for test case generation (copilot or twinkle), by default it is set to twinkle",
+	Short: "Set the model to be used for test case generation (copilot or twinkle), by default it is set to twinkle.",
 	Args:  cobra.ExactArgs(1), // Ensure exactly one argument is provided
 	Run: func(cmd *cobra.Command, args []string) {
 		// Validate and set model
@@ -54,6 +54,9 @@ var configUseCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Config updated: model set to %s\n", model)
+		if config.Model == modelCopilot && config.CopilotToken == "" {
+			log.Warn("Copilot token is not set. You must init the Copilot token manually before using it. Please run `smart-testify config copilot init-token` and follow the instructions.")
+		}
 	},
 }
 

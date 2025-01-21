@@ -34,7 +34,7 @@ var initTokenCmd = &cobra.Command{
 
 var copilotCmd = &cobra.Command{
 	Use:   "copilot",
-	Short: "Configure settings for Copilot",
+	Short: "Configure settings for Copilot.",
 }
 
 func init() {
