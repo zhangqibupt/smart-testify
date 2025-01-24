@@ -37,38 +37,63 @@ const (
 
 // generateCmd generates the Go files or directories
 var generateCmd = &cobra.Command{
-	Use:   "generate <path of file or directory>",
+	Use:   "generate <paths of files or directories>",
 	Short: "Generate test files for Go code",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.MinimumNArgs(0), // Allow multiple arguments
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			cmd.Help()
 			return
 		}
 
-		pathFlag := args[0]
+		invalidPaths := []string{}
+		validPaths := []string{}
 
-		// Process file or directory
-		fileInfo, err := os.Stat(pathFlag)
-		if err != nil {
-			log.Errorf("Failed to get file info: %v, please check the path", err)
+		// Step 1: Validate paths and ensure files are Go files
+		for _, path := range args {
+			fileInfo, err := os.Stat(path)
+			if err != nil {
+				invalidPaths = append(invalidPaths, path)
+				continue
+			}
+
+			// If it's a file, check if it has a .go extension
+			if !fileInfo.IsDir() && filepath.Ext(path) != ".go" {
+				invalidPaths = append(invalidPaths, path+" (not a Go file)")
+				continue
+			}
+
+			// Add valid paths
+			validPaths = append(validPaths, path)
+		}
+
+		// Report invalid paths and exit if any
+		if len(invalidPaths) > 0 {
+			log.Errorf("Invalid paths: %v", invalidPaths)
 			return
 		}
 
-		// print all parameters before processing
-		log.Infof("Path: %s", pathFlag)
 		log.Infof("Mode: %s", modeFlag)
 		log.Infof("Function Filter: %s", filter)
 		log.Infof("Ignore Error: %v", ignoreErrorFlag)
 		log.Infof("Granularity: %s", granularity)
 
-		if fileInfo.IsDir() {
-			if err := processDirectory(pathFlag); err != nil {
-				log.Errorf("Failed to process directory: %v", err)
-			}
-		} else {
-			if err := processFile(pathFlag); err != nil {
-				log.Errorf("Failed to process file: %v", err)
+		// Step 2: Process valid paths
+		for _, path := range validPaths {
+			fileInfo, _ := os.Stat(path) // No need to check error again, already validated
+
+			log.Infof("Processing Path: %s", path)
+
+			if fileInfo.IsDir() {
+				// Process directory
+				if err := processDirectory(path); err != nil {
+					log.Errorf("Failed to process directory '%s': %v", path, err)
+				}
+			} else {
+				// Process Go file
+				if err := processFile(path); err != nil {
+					log.Errorf("Failed to process file '%s': %v", path, err)
+				}
 			}
 		}
 	},
