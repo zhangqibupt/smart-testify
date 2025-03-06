@@ -676,61 +676,53 @@ func collectTypesAndFunctionsFromBody(body *ast.BlockStmt) ([]functionPair, []ty
 		switch x := n.(type) {
 		case *ast.CallExpr:
 			if sel, ok := x.Fun.(*ast.SelectorExpr); ok {
-				// Handle calls like `pkg.Func()` or `var.Method()`
 				if pkgIdent, ok := sel.X.(*ast.Ident); ok {
-					if pkgIdent.Obj != nil && pkgIdent.Obj.Kind == ast.Pkg {
-						// This is a package function call (e.g., `pkg.Func()`)
+					if pkgIdent.Obj != nil && pkgIdent.Obj.Kind == ast.Var {
+						// ignore this case for now (e.g., c.Method())
+						//usedFunctions = append(usedFunctions, functionPair{
+						//	PackageName: "",
+						//	TypeName:    pkgIdent.Name, // 存入变量名作为类型
+						//	FuncName:    sel.Sel.Name,
+						//})
+					} else {
+						// 直接使用 Ident 名称作为 package 名，不依赖 pkgIdent.Obj
 						usedFunctions = append(usedFunctions, functionPair{
 							PackageName: pkgIdent.Name,
-							TypeName:    "", // No type for package-level functions
+							TypeName:    "",
 							FuncName:    sel.Sel.Name,
 						})
-					} else if pkgIdent.Obj != nil && pkgIdent.Obj.Kind == ast.Var {
-						// This is a variable method call (e.g., `var.Method()`)
-						// Extract the variable's type and package
-						if varDecl, ok := pkgIdent.Obj.Decl.(*ast.Field); ok {
-							var typeName, packageName string
-							if varDecl.Type != nil {
-								switch t := varDecl.Type.(type) {
-								case *ast.Ident:
-									// Local type (e.g., `MyType`)
-									typeName = t.Name
-								case *ast.StarExpr:
-									// Imported type (e.g., `pkg.MyType`)
-									if pkg, ok := t.X.(*ast.SelectorExpr); ok {
-										packageName = pkg.X.(*ast.Ident).Name
-										typeName = t.X.(*ast.SelectorExpr).Sel.Name
-									}
-								}
-							}
-							usedFunctions = append(usedFunctions, functionPair{
-								PackageName: packageName,
-								TypeName:    typeName,
-								FuncName:    sel.Sel.Name,
-							})
-						}
 					}
+				} else {
+					// 可能是对象方法调用 (var.Method())，尝试解析 var 的类型
+					//var typeName string
+					//if typ, ok := sel.X.(*ast.Ident); ok {
+					//	typeName = typ.Name // 直接获取变量的类型名称
+					//}
+					//usedFunctions = append(usedFunctions, functionPair{
+					//	PackageName: "",
+					//	TypeName:    typeName,
+					//	FuncName:    sel.Sel.Name,
+					//})
 				}
 			} else if funIdent, ok := x.Fun.(*ast.Ident); ok {
-				// Handle direct function calls (e.g., `Func()`)
+				// 直接函数调用 (Func())
 				usedFunctions = append(usedFunctions, functionPair{
-					PackageName: "", // No package for direct function calls
-					TypeName:    "", // No type for direct function calls
+					PackageName: "",
+					TypeName:    "",
 					FuncName:    funIdent.Name,
 				})
 			}
 		case *ast.Ident:
-			// Handle type identifiers (e.g., `int`, `string`)
 			if x.Obj != nil && x.Obj.Kind == ast.Typ {
 				usedTypes = append(usedTypes, typePair{
-					PackageName: "", // No package for local types
+					PackageName: "",
 					TypeName:    x.Name,
 				})
 			}
 		case *ast.SelectorExpr:
-			// Handle type selectors (e.g., `pkg.Type`)
 			if pkgIdent, ok := x.X.(*ast.Ident); ok {
-				if x.Sel.Obj != nil && x.Sel.Obj.Kind == ast.Typ {
+				// 修复：判断是否是包选择符，而不是类型
+				if pkgIdent.Obj == nil || pkgIdent.Obj.Kind != ast.Typ {
 					usedTypes = append(usedTypes, typePair{
 						PackageName: pkgIdent.Name,
 						TypeName:    x.Sel.Name,
@@ -741,7 +733,6 @@ func collectTypesAndFunctionsFromBody(body *ast.BlockStmt) ([]functionPair, []ty
 		return true
 	})
 
-	// Return unique pairs
 	return uniqueFunctionPair(usedFunctions), uniqueTypePair(usedTypes), nil
 }
 

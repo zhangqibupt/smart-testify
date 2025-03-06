@@ -45,7 +45,7 @@ Generate unit test files for Go code.
 
 - **`generate <path>`**: Generate tests for a specified Go file or directory.
   - **`--mode`** (`-m`): Mode for test generation (`append` or `skip`). Defaults to `append`.
-  - **`--filter`** (`-f`): Regex filter for functions to generate tests for.
+  - **`--filter`** (`-f`): Regex filter for functions to generate tests for. Wildcard is supported, but you need to wrap it in quotes. For example `-f "Test*"`.
   - **`--granularity`** (`-g`): Granularity of test generation (`file` or `function`).
   - **`--ignore-error`** (`-c`): Continue processing if an error occurs. Defaults to `false`.
 
