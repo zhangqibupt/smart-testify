@@ -640,7 +640,7 @@ func generateTypeDefinitionSectionCode(method *ast.FuncDecl, filePath string) (s
 	for _, funcDef := range usedFunctions {
 		funcSource, err := util.FindFunctionSource(filePath, funcDef.PackageName, funcDef.TypeName, funcDef.FuncName)
 		if err != nil {
-			return "", fmt.Errorf("failed to find function definition for %s: %w", funcDef, err)
+			return "", nil
 		}
 		funcSource = fmt.Sprintf("Package: %s \nMethod: %s\n", funcDef.PackageName, funcDef.FuncName) + funcSource
 		generatedTypeDefinationCode += "\n\n" + funcSource
