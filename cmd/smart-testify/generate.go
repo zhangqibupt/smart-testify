@@ -642,6 +642,7 @@ func generateTypeDefinitionSectionCode(method *ast.FuncDecl, filePath string) (s
 		if err != nil {
 			return "", fmt.Errorf("failed to find function definition for %s: %w", funcDef, err)
 		}
+		funcSource = fmt.Sprintf("Package: %s \nMethod: %s\n", funcDef.PackageName, funcDef.FuncName) + funcSource
 		generatedTypeDefinationCode += "\n\n" + funcSource
 	}
 
@@ -787,7 +788,7 @@ func generateTypeDefinition(filePath string, pairs []typePair) (string, error) {
 			if pair.PackageName == "" {
 				resultCode.WriteString(fmt.Sprintf("Model: %s\nDefinition:\n%s\n", pair.TypeName, sourceCode))
 			} else {
-				resultCode.WriteString(fmt.Sprintf("Package: %s Model: %s\nDefinition:\n%s\n", pair.PackageName, pair.TypeName, sourceCode))
+				resultCode.WriteString(fmt.Sprintf("Package: %s \nModel: %s\nDefinition:\n%s\n", pair.PackageName, pair.TypeName, sourceCode))
 			}
 		}
 	}

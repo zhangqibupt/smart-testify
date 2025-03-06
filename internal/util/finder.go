@@ -47,7 +47,7 @@ func FindTypeSource(filePath string, typePrefixImportName string, typeName strin
 	} else {
 		importFullName, ok := findImportPath(typePrefixImportName, node.Imports)
 		if !ok {
-			return "", fmt.Errorf("package %s not found", typePrefixImportName)
+			return "", nil
 		}
 
 		pkgPath, err := resolveImportPath(pkgPath, importFullName)
