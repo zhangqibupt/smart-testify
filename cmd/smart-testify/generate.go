@@ -642,8 +642,10 @@ func generateTypeDefinitionSectionCode(method *ast.FuncDecl, filePath string) (s
 		if err != nil {
 			return "", nil
 		}
-		funcSource = fmt.Sprintf("Package: %s \nMethod: %s\n", funcDef.PackageName, funcDef.FuncName) + funcSource
-		generatedTypeDefinationCode += "\n\n" + funcSource
+		if len(strings.TrimSpace(funcSource)) > 0 {
+			funcSource = fmt.Sprintf("Package: %s \nMethod: %s\n", funcDef.PackageName, funcDef.FuncName) + funcSource
+			generatedTypeDefinationCode += "\n\n" + funcSource
+		}
 	}
 
 	return generatedTypeDefinationCode, nil
