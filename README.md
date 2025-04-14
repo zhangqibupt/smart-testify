@@ -1,4 +1,3 @@
-
 # Smart-Testify
 
 Smart-Testify is a tool that generates unit test files for Go code using AI. It supports various commands for configuring settings, managing prompts, and generating tests. Below is a concise overview of the commands and usage.
@@ -76,6 +75,35 @@ Generate unit test files for Go code.
 
 ## How does it work
 ![demo](assets/workflow.png)
+
+## Q&A
+
+### How does Smart-Testify check if a test function already exists?
+
+Smart-Testify uses a systematic approach to check for existing test functions:
+
+1. **Test Function Naming**: For a given method, it generates the test function name using this pattern:
+   - For methods with receivers: `Test[ReceiverType]_[MethodName]`
+   - For standalone functions: `Test[FunctionName]`
+   The first letter of the method name is automatically capitalized.
+
+2. **Existence Check**: When processing a test file:
+   - The tool parses the existing test file using Go's AST (Abstract Syntax Tree)
+   - It looks for all function declarations that start with "Test"
+   - These functions are stored in a map with their names as keys
+   - When generating a new test, it checks this map to see if the test function name already exists
+
+### Can I generate tests for specific functions only?
+
+Yes, you can use the `--filter` (`-f`) flag with a regex pattern to generate tests for specific functions. For example:
+- `--filter "Create.*"` will generate tests for all functions starting with "Create"
+- `--filter "^Get"` will generate tests for all functions starting with "Get"
+- `--filter "User$"` will generate tests for all functions ending with "User"
+
+### What happens if there's an error during generation?
+
+By default, when Smart-Testify is processing multiple fils, it will stop processing when it encounters an error. However, you can use the `--ignore-error` (`-c`) flag to continue processing other files/functions even if some fail.
+
 ## Contributing
 
 Contributions are welcome! If you find any bugs or want to add new features, please fork the repository, make changes, and create a pull request. Before submitting your pull request, ensure that you have run all tests and followed the coding style guidelines.

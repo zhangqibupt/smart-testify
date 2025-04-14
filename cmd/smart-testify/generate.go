@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -18,6 +17,8 @@ import (
 	"smart-testify/internal/util"
 	"sort"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -158,6 +159,7 @@ func processFile(filePath string) error {
 			return nil
 		}
 
+		log.Infof("Test file exists for %s, loading it...", testFilePath)
 		_, existingTests, err = parseTestFile(testFilePath)
 		if err != nil {
 			return fmt.Errorf("Failed to parse existing test file: %v", err)
@@ -286,26 +288,10 @@ func parseTestFile(filePath string) (*ast.File, map[string]*ast.FuncDecl, error)
 	return node, existingTests, nil
 }
 
-// generateTestFileFromAST generates the final test file code from the modified AST.
-func generateTestFileFromAST(fset *token.FileSet, existingNode *ast.File, modifiedTestCode []ast.Decl) (string, error) {
-	var buf bytes.Buffer
-	node := &ast.File{
-		Decls: modifiedTestCode,
-		Name:  existingNode.Name,
-	}
-
-	// Format the AST to source code
-	err := format.Node(&buf, fset, node)
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
-}
-
 // generateTestFuncName generates the test function name based on receiver type and method name.
 func generateTestFuncName(method *ast.FuncDecl) (string, error) {
 	// Assuming method has a receiver
+	methodName := strings.ToUpper(string(method.Name.Name[0])) + method.Name.Name[1:]
 	if method.Recv != nil && len(method.Recv.List) > 0 {
 		// Extract the receiver type name
 		pair, err := parseTypeDefination(method.Recv.List[0].Type)
@@ -317,9 +303,9 @@ func generateTestFuncName(method *ast.FuncDecl) (string, error) {
 		}
 
 		// Generate test function name: Test[Receiver][Method]
-		return "Test" + pair[0].TypeName + "_" + method.Name.Name, nil
+		return "Test" + pair[0].TypeName + "_" + methodName, nil
 	}
-	return "Test" + method.Name.Name, nil
+	return "Test" + methodName, nil
 }
 
 // Check if a file exists
@@ -390,7 +376,7 @@ func extractCode(response string) (string, error) {
 
 	// Now, find the closing backticks
 	end := strings.LastIndex(response, "```")
-	if end == -1 || end == start {
+	if end == -1 || end < start {
 		return "", errors.New("code not found: missing ending backticks")
 	}
 
@@ -805,5 +791,5 @@ func init() {
 		"When mode=skip and granularity=file, the entire test file is skipped. "+
 		"When mode=skip and granularity=function, the test function is skipped. "+
 		"When mode=append, no matter the granularity, the test function is appended to the test file.")
-	generateCmd.Flags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "Continue handling next file even if an error occurs")
+	generateCmd.Flags().BoolVarP(&ignoreErrorFlag, "ignore-error", "c", false, "When Smart-Testify is processing multiple fils, it will stop processing when it encounters an error. However, you can use --ignore-error to ignore the error and continue processing the next file.")
 }
