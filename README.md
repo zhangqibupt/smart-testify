@@ -23,6 +23,7 @@ Clone the repository, go into the root folder and run
 ```bash  
 make install
 ```  
+Note that, `smart-testify` depends on `goimports`, it will be installed automatically if you don't have it.
 
 ## Quick Start
 Then follow below steps to use it
@@ -38,7 +39,6 @@ smart-testify config prompt add <your-prompt-name>
 ```bash
 smart-testify generate <file/folder>
 ```
-
 
 
 ## Usage
