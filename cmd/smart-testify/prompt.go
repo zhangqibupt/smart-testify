@@ -2,58 +2,146 @@ package main
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 var promptCmd = &cobra.Command{
 	Use:   "prompt",
-	Short: "Edit or view the default prompt when calling AI model to generate test cases",
+	Short: "Manage prompts for generating test cases",
 }
 
-var promptEditCMD = &cobra.Command{
-	Use:   "edit",
-	Short: "Edit the default prompt for the generated test cases",
+var promptListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all available prompts",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Open the config file in an editor for editing
-		openEditor()
+		prompts, err := listPrompts()
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to list prompts: %v", err))
+			return
+		}
+
+		defaultPrompt, err := getDefaultPromptName()
+		if err != nil {
+			log.Warn("You have not set a default prompt yet. Please set one using: smart-testify config prompt set-default <name>")
+		}
+
+		if len(prompts) == 0 {
+			log.Warn("No prompts available. Please create one using: smart-testify config prompt add <name>")
+			return
+		}
+
+		fmt.Println("Available prompts:")
+		for _, prompt := range prompts {
+			if prompt == defaultPrompt {
+				fmt.Printf("* %s (default)\n", prompt)
+			} else {
+				fmt.Printf("  %s\n", prompt)
+			}
+		}
 	},
 }
 
-var promptResetCMD = &cobra.Command{
-	Use:   "reset",
-	Short: "Reset the prompt to its original state",
+var promptShowCmd = &cobra.Command{
+	Use:   "show <name>",
+	Short: "Show the content of a prompt",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Reset the prompt to the default state
-		resetPrompt()
-	},
-}
-
-// create a show command to display the prompt
-var promptShowCMD = &cobra.Command{
-	Use:   "show",
-	Short: "Show the current prompt",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Read the prompt from the file
-		prompt, err := loadPrompt()
+		promptName := args[0]
+		content, err := loadPrompt(promptName)
 		if err != nil {
 			log.Error(fmt.Sprintf("Failed to load prompt: %v", err))
 			return
 		}
-		fmt.Printf(string(prompt))
+		fmt.Printf("%s", content)
 	},
 }
 
-func getPromptPath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatal(fmt.Sprintf("Error getting user home directory: %v", err))
-	}
-	return filepath.Join(homeDir, ".smart-testify", "prompt")
+var promptEditCmd = &cobra.Command{
+	Use:   "edit <name>",
+	Short: "Edit a prompt",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		promptName := args[0]
+		openEditor(promptName)
+	},
+}
+
+var promptAddCmd = &cobra.Command{
+	Use:   "add <name>",
+	Short: "Create a new prompt",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		promptName := args[0]
+		if err := validatePromptName(promptName); err != nil {
+			log.Error(fmt.Sprintf("Invalid prompt name: %v", err))
+			return
+		}
+
+		if err := createPrompt(promptName, newPrompt); err != nil {
+			log.Error(fmt.Sprintf("Failed to create prompt: %v", err))
+			return
+		}
+		log.Infof("Created new prompt: %s", promptName)
+
+		// open the prompt in the editor
+		openEditor(promptName)
+	},
+}
+
+var promptRemoveCmd = &cobra.Command{
+	Use:   "remove <name>",
+	Short: "Remove a prompt",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		promptName := args[0]
+
+		// Check if it's the last prompt
+		prompts, err := listPrompts()
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to list prompts: %v", err))
+			return
+		}
+		if len(prompts) <= 1 {
+			log.Error("Cannot remove the last prompt")
+			return
+		}
+
+		// Check if it's the default prompt
+		defaultPrompt, err := getDefaultPromptName()
+		if err != nil {
+			if promptName == defaultPrompt {
+				log.Error("Cannot remove the default prompt. Set another prompt as default first.")
+				return
+			}
+		}
+
+		if err := removePrompt(promptName); err != nil {
+			log.Error(fmt.Sprintf("Failed to remove prompt: %v", err))
+			return
+		}
+		log.Infof("Removed prompt: %s", promptName)
+	},
+}
+
+var promptSetDefaultCmd = &cobra.Command{
+	Use:   "set-default <name>",
+	Short: "Set the default prompt",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		promptName := args[0]
+		if err := setDefaultPrompt(promptName); err != nil {
+			log.Error(fmt.Sprintf("Failed to set default prompt: %v", err))
+			return
+		}
+		log.Infof("Set default prompt to: %s", promptName)
+	},
 }
 
 const defaultPrompt = `The output must meet below conditions. 
@@ -75,24 +163,187 @@ const defaultPrompt = `The output must meet below conditions.
 				defer patches.Reset()
 `
 
-func openEditor() {
-	// Check if file exists, create it if it doesn't
-	if _, err := os.Stat(getPromptPath()); os.IsNotExist(err) {
-		log.Infof("Prompt file doesn't exist, creating a new one in %s.", getPromptPath())
-		if err := createDefaultPrompt(); err != nil {
+const newPrompt = `The output must meet below conditions. 
+1. Should include success and failure cases, and include edge cases. When DB operation is involved, you should include db error. Make your best to cover 100 percent of the code. 
+2. When function has receiver, you should include it in the test name. For example, TestLuContentRatingDao_GetALL for function GetALL in LuContentRatingDao.
+3. For each function you generated, you should include a comment to declare this function is generated by AI.
+4. Be attention to the case-sensitivity of the code.
+5. You should generate different cases in format like t.Run("test name", func(t *testing.T) { ... }) for each case.
+6. You should use github.com/stretchr/testify/assert to do the assertion. For example, assert.Equal(t, expected, actual).
+`
+
+func getPromptsDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Error getting user home directory: %v", err))
+	}
+	return filepath.Join(homeDir, ".smart-testify", "prompts")
+}
+
+func getDefaultPromptPath() string {
+	return filepath.Join(getPromptsDir(), "default")
+}
+
+func validatePromptName(name string) error {
+	if name == "" {
+		return fmt.Errorf("prompt name cannot be empty")
+	}
+	if name == "default" {
+		return fmt.Errorf("'default' is a reserved name")
+	}
+	// Check for invalid characters in filename
+	if strings.ContainsAny(name, "/\\:*?\"<>|") {
+		return fmt.Errorf("prompt name contains invalid characters")
+	}
+	return nil
+}
+
+func getPromptPath(name string) string {
+	return filepath.Join(getPromptsDir(), name+".txt")
+}
+
+func listPrompts() ([]string, error) {
+	files, err := ioutil.ReadDir(getPromptsDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var prompts []string
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".txt") {
+			prompts = append(prompts, strings.TrimSuffix(file.Name(), ".txt"))
+		}
+	}
+	return prompts, nil
+}
+
+func createPrompt(name string, content string) error {
+	if err := os.MkdirAll(getPromptsDir(), 0755); err != nil {
+		return err
+	}
+
+	promptPath := getPromptPath(name)
+	if _, err := os.Stat(promptPath); err == nil {
+		return fmt.Errorf("prompt already exists: %s", name)
+	}
+
+	if err := ioutil.WriteFile(promptPath, []byte(content), 0644); err != nil {
+		return err
+	}
+
+	// If this is the first prompt, set it as default
+	prompts, err := listPrompts()
+	if err != nil {
+		return err
+	}
+	if len(prompts) == 1 {
+		return setDefaultPrompt(name)
+	}
+
+	return nil
+}
+
+func removePrompt(name string) error {
+	return os.Remove(getPromptPath(name))
+}
+
+func getDefaultPromptName() (string, error) {
+	content, err := ioutil.ReadFile(getDefaultPromptPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			prompts, err := listPrompts()
+			if err != nil {
+				return "", err
+			}
+			if len(prompts) > 0 {
+				return prompts[0], nil
+			}
+			return "", fmt.Errorf("no prompts available")
+		}
+		return "", err
+	}
+	return string(content), nil
+}
+
+func setDefaultPrompt(name string) error {
+	// Verify the prompt exists
+	if _, err := os.Stat(getPromptPath(name)); os.IsNotExist(err) {
+		return fmt.Errorf("prompt does not exist: %s", name)
+	}
+
+	// Create prompts directory if it doesn't exist
+	if err := os.MkdirAll(getPromptsDir(), 0755); err != nil {
+		return err
+	}
+
+	// Write the prompt name to the default file
+	return ioutil.WriteFile(getDefaultPromptPath(), []byte(name), 0644)
+}
+
+func loadPrompt(name string) (string, error) {
+	if name == "" {
+		var err error
+		name, err = getDefaultPromptName()
+		if err != nil {
+			// Don't treat missing default as an error, just advise the user
+			if os.IsNotExist(err) {
+				log.Warn("No default prompt configured. Please set one using: smart-testify config prompt set-default <name>")
+				prompts, listErr := listPrompts()
+				if listErr == nil && len(prompts) > 0 {
+					log.Info("Available prompts:")
+					for _, p := range prompts {
+						log.Info(fmt.Sprintf("  %s", p))
+					}
+				}
+				return "", fmt.Errorf("no default prompt configured")
+			}
+			return "", err
+		}
+		log.Info(fmt.Sprintf("Using prompt: %s", name))
+	}
+
+	promptPath := getPromptPath(name)
+	if _, err := os.Stat(promptPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("prompt does not exist: %s", name)
+	}
+
+	content, err := ioutil.ReadFile(promptPath)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+func openEditor(promptName string) {
+	if promptName == "" {
+		var err error
+		promptName, err = getDefaultPromptName()
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to get default prompt: %v", err))
 			return
 		}
 	}
 
-	// Try to open the file using the system's default "open" tool
+	promptPath := getPromptPath(promptName)
+
+	// Create the prompt if it doesn't exist
+	if _, err := os.Stat(promptPath); os.IsNotExist(err) {
+		log.Error(fmt.Sprintf("Prompt does not exist: %s", promptPath))
+		return
+	}
+
+	// Open the file in the default editor
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin": // macOS
-		cmd = exec.Command("open", getPromptPath())
+		cmd = exec.Command("open", promptPath)
 	case "windows": // Windows
-		cmd = exec.Command("start", getPromptPath())
+		cmd = exec.Command("start", promptPath)
 	default: // Linux and others
-		cmd = exec.Command("xdg-open", getPromptPath())
+		cmd = exec.Command("xdg-open", promptPath)
 	}
 
 	cmd.Stdout = os.Stdout
@@ -102,45 +353,11 @@ func openEditor() {
 	}
 }
 
-func createDefaultPrompt() error {
-	// create the directory if it doesn't exist
-	dir := filepath.Dir(getPromptPath())
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	if err := ioutil.WriteFile(getPromptPath(), []byte(defaultPrompt), 0644); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadPrompt() (string, error) {
-	promptFilePath := getPromptPath()
-
-	// if file not exist, create a new one
-	if _, err := os.Stat(promptFilePath); os.IsNotExist(err) {
-		if err := createDefaultPrompt(); err != nil {
-			return "", err
-		}
-		return "", nil
-	}
-
-	prompt, err := ioutil.ReadFile(promptFilePath)
-	if err != nil {
-		return "", fmt.Errorf("error reading prompt file: %v", err)
-	}
-	return string(prompt), nil
-}
-
-func resetPrompt() {
-	if err := createDefaultPrompt(); err != nil {
-		log.Error(fmt.Sprintf("Failed to reset prompt: %v", err))
-	}
-}
-
 func init() {
-	promptCmd.AddCommand(promptShowCMD)
-	promptCmd.AddCommand(promptEditCMD)
-	promptCmd.AddCommand(promptResetCMD)
+	promptCmd.AddCommand(promptListCmd)
+	promptCmd.AddCommand(promptShowCmd)
+	promptCmd.AddCommand(promptEditCmd)
+	promptCmd.AddCommand(promptAddCmd)
+	promptCmd.AddCommand(promptRemoveCmd)
+	promptCmd.AddCommand(promptSetDefaultCmd)
 }

@@ -542,14 +542,12 @@ func generatePrompt(fset *token.FileSet, method *ast.FuncDecl, filePath string) 
 		return "", err
 	}
 
-	customPrompt, err := loadPrompt()
+	customPrompt, err := loadPrompt("")
 	if err != nil {
+		if err.Error() == "no default prompt configured" {
+			return "", fmt.Errorf("no prompt configured - please set a default prompt using: smart-testify config prompt set-default <name>")
+		}
 		return "", err
-	}
-
-	if customPrompt == "" {
-		log.Warnf("No custom prompt found, using default prompt")
-		customPrompt = defaultPrompt
 	}
 
 	// Generate the final prompt with context

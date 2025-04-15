@@ -19,33 +19,42 @@ Smart-Testify is a tool that generates unit test files for Go code using AI. It 
 
 Smart-Testify can be installed by downloading the latest release or building from source.
 
-### To build from source:
-
 Clone the repository, go into the root folder and run
 ```bash  
 make install
 ```  
 
+## Quick Start
+Then follow below steps to use it
+1. Setup token for Copilot
+`smart-testify config copilot init-token`
+2. Create prompt used to guide the AI how to generate the test code. 
+`smart-testify config prompt add <your-prompt-name>`
+3. Generate UT
+`smart-testify generate <file/folder>`
+
+
+
 ## Usage
-
-
-
 ### Commands
 
 #### `config`
 Configure settings.
 
-- **`use`**: Set the AI model to use (`copilot` or `twinkle`).
+- **`use`**: Set the AI model to use (`copilot` or `twinkle`). If `copilot` is chosen, you need to run `smart-testify config copilot init-token` before using it.
 - **`show`**: Display current configuration.
-- **`prompt`**: Manage the default prompt for test generation.
-  - **`edit`**: Edit the default prompt.
-  - **`reset`**: Reset the prompt to its original state.
-  - **`show`**: Show the current prompt.
+- **`prompt`**: Manage prompts for test generation.
+  - **`list`**: List all available prompts.
+  - **`show <name>`**: Show content of a specific prompt.
+  - **`edit <name>`**: Edit a specific prompt.
+  - **`add <name>`**: Create a new prompt.
+  - **`remove <name>`**: Remove a prompt.
+  - **`set-default <name>`**: Set which prompt is the default.
 
 #### `generate`
 Generate unit test files for Go code.
 
-- **`generate <path>`**: Generate tests for a specified Go file or directory.
+- **`generate <file/folder>`**: Generate tests for a specified Go file or directory.
   - **`--mode`** (`-m`): Mode for test generation (`append` or `skip`). Defaults to `append`.
   - **`--filter`** (`-f`): Regex filter for functions to generate tests for. Wildcard is supported, but you need to wrap it in quotes. For example `-f "Test*"`.
   - **`--granularity`** (`-g`): Granularity of test generation (`file` or `function`).
@@ -60,17 +69,16 @@ Generate unit test files for Go code.
 
 2. **Generate tests for a Go file**:
 ```bash  
- smart-testify generate /path/to/your/file.go  
+ smart-testify generate <file/folder>
 ```  
 
-3. **Edit the prompt for test case generation**:
+3. **Add the prompt for test case generation**:
 ```bash  
- smart-testify config prompt edit  
+ smart-testify config prompt add <prompt-name>
 ```  
-
-4. **Reset the prompt to the default**:
+4. **Set default prompt for test case generation**:
 ```bash  
- smart-testify config prompt reset  
+ smart-testify config prompt set-default <prompt-name>
 ```  
 
 ## How does it work
