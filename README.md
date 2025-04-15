@@ -27,11 +27,17 @@ make install
 ## Quick Start
 Then follow below steps to use it
 1. Setup token for Copilot
-`smart-testify config copilot init-token`
+```bash
+smart-testify config copilot init-token
+```
 2. Create prompt used to guide the AI how to generate the test code. 
-`smart-testify config prompt add <your-prompt-name>`
+```bash
+smart-testify config prompt add <your-prompt-name>
+```
 3. Generate UT
-`smart-testify generate <file/folder>`
+```bash
+smart-testify generate <file/folder>
+```
 
 
 
