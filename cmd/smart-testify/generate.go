@@ -290,8 +290,9 @@ func parseTestFile(filePath string) (*ast.File, map[string]*ast.FuncDecl, error)
 
 // generateTestFuncName generates the test function name based on receiver type and method name.
 func generateTestFuncName(method *ast.FuncDecl) (string, error) {
-	// Assuming method has a receiver
-	methodName := strings.ToUpper(string(method.Name.Name[0])) + method.Name.Name[1:]
+	// Keep original method name to preserve case
+	methodName := method.Name.Name
+
 	if method.Recv != nil && len(method.Recv.List) > 0 {
 		// Extract the receiver type name
 		pair, err := parseTypeDefination(method.Recv.List[0].Type)
@@ -302,10 +303,11 @@ func generateTestFuncName(method *ast.FuncDecl) (string, error) {
 			return "", fmt.Errorf("receiver type not found")
 		}
 
-		// Generate test function name: Test[Receiver][Method]
-		return "Test" + pair[0].TypeName + "_" + methodName, nil
+		// Generate test function name: Test_[Receiver]_[Method]
+		return "Test_" + pair[0].TypeName + "_" + methodName, nil
 	}
-	return "Test" + methodName, nil
+	// For regular functions: Test_[Method]
+	return "Test_" + methodName, nil
 }
 
 // Check if a file exists
