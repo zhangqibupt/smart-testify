@@ -3,7 +3,7 @@
 Smart-Testify is a tool that generates unit test files for Go code using AI. It supports various commands for configuring settings, managing prompts, and generating tests. Below is a concise overview of the commands and usage.
 
 # Demo
-<video src="https://github.freewheel.tv/qzhang/smart-testify/assets/347/f067b838-8abf-4ce5-bbd8-4b1ee5b681d5" controls width="600"></video>
+<video src="https://github.com/zhangqibupt/smart-testify/releases/download/demo/smart-testify.demo.mp4" controls width="600"></video>
 
 ## Table of Contents
 
