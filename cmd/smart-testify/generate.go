@@ -552,6 +552,11 @@ func generatePrompt(fset *token.FileSet, method *ast.FuncDecl, filePath string) 
 		return "", err
 	}
 
+	testFuncName, err := generateTestFuncName(method)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate test function name: %s", err.Error())
+	}
+
 	// Generate the final prompt with context
 	return fmt.Sprintf(`Generate unit tests for below function: 
 %s
@@ -561,12 +566,13 @@ The related types and functions definition code is:
 %s
 
 You should only output the test function, nothing else. Don't output the package declaration, imports, or any other code.
+The test function name should be %s.
 
 %s
 `,
 		importSectionCode,
 		methodCode,
-		generatedTypeDefinationCode, customPrompt,
+		generatedTypeDefinationCode, testFuncName, customPrompt,
 	), nil
 }
 
